@@ -148,14 +148,15 @@ func emptyTrash(skipPrompt: Bool) throws {
     }
     if !skipPrompt {
         let plural = trashItemsCount > 1
-        print("There %@ currently %i item%@ in the trash.",
+        print("There",
               plural ? "are" : "is",
+              "currently",
               trashItemsCount,
-              plural ? "s" : "")
-        print("Are you sure you want to permanently delete %@ item%@?",
+              "item\(plural ? "s" : "")",
+              "in the trash.")
+        print("Are you sure you want to permanently delete",
               plural ? "these" : "this",
-              plural ? "s" : ""
-        )
+              "item\(plural ? "s" : "")?")
         print("(y = permanently empty the trash, l = list items in trash, n = don't empty)")
 
         loop: while true {
