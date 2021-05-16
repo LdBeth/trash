@@ -112,16 +112,19 @@ func directorySize(_ url: URL) throws -> Int64 {
 func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     let trash = pathToTrash()
     let fm = FileManager.default
-    if let items = try? fm.contentsOfDirectory(
+    guard let items = try? fm.contentsOfDirectory(
          at: trash,
          includingPropertiesForKeys: [],
          options: (showHidden ? [] :
                      [.skipsHiddenFiles])
-       ) {
-        for item in items {
-            print(item.path)
-        }
+          ) else {
+        print("failed to get contents of trash directory", to: &stdErr)
+        exit(EXIT_FAILURE)
     }
+    for item in items {
+        print(item.path)
+    }
+
     if showAdditionalInfo {
         print("\nCalculating total disk usage of files in trash...")
         if let bytes = try? directorySize(trash) {
