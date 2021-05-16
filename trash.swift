@@ -52,6 +52,7 @@ func printUsage() {
           "      show hidden files)",
           "  -e  Empty the trash (asks for confirmation)",
           "  -s  Securely empty the trash (asks for confirmation)",
+          "      (obsolete)",
           "  -y  Skips the confirmation prompt for -e and -s.",
           "      CAUTION: Deletes permanently instantly.",
           "",
@@ -137,11 +138,44 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     }
 }
 
-func emptyTrash(securely: Bool, skipPrompt: Bool) -> OSStatus {
-    // TODO
-    print("empty trash is not implemented", to: &stdErr)
-    exit(EXIT_FAILURE)
-    // return noErr
+func emptyTrash(skipPrompt: Bool) throws {
+    let trashItemsCount = try FileManager.default.contentsOfDirectory(
+      atPath: pathToTrash().path
+    ).count
+    if trashItemsCount == 0 {
+        print("The trash is already empty")
+        return
+    }
+    if !skipPrompt {
+        let plural = trashItemsCount > 1
+        print("There %@ currently %i item%@ in the trash.",
+              plural ? "are" : "is",
+              trashItemsCount,
+              plural ? "s" : "")
+        print("Are you sure you want to permanently delete %@ item%@?",
+              plural ? "these" : "this",
+              plural ? "s" : ""
+        )
+        print("(y = permanently empty the trash, l = list items in trash, n = don't empty)")
+
+        loop: while true {
+            switch promptForChar("ylN") {
+            case "l":
+                listTrashContents(
+                  showAdditionalInfo: false,
+                  showHidden: true
+                )
+            case "n":
+                return
+            default: // yes
+                break loop
+            }
+        }
+    }
+    let tellFinderempty = "tell application \"Finder\" to empty"
+    var error: NSDictionary?
+    NSAppleScript(source: tellFinderempty)?.executeAndReturnError(&error)
+    return
 }
 
 func GetKeyPress() -> Character {
@@ -159,9 +193,8 @@ func GetKeyPress() -> Character {
     return Character(UnicodeScalar(key)!)
 }
 
-func promptForChar(_ acceptableChars: String) -> Character {
+func promptForChar(_ acceptableChars: String) -> String {
     let lowercase = acceptableChars.lowercased()
-    let uppercase = acceptableChars.uppercased()
     var out = ""
     acceptableChars.forEach { char in
         out += "/\(char)"
@@ -169,9 +202,9 @@ func promptForChar(_ acceptableChars: String) -> Character {
     let prompt = "[\(out.dropFirst())]"
     while true {
         print(prompt, terminator:"")
-        let input = GetKeyPress()
+        let input = GetKeyPress().lowercased()
         print("")
-        if lowercase.contains(input) || uppercase.contains(input) {
+        if lowercase.contains(input) {
             return input
         }
     }
@@ -190,14 +223,6 @@ func checkForRoot() {
     }
 }
 
-func fileExistsAtPath(_ filePath: String) -> Bool {
-    return FileManager.default.fileExists(atPath: filePath)
-}
-
-func getFileURL(_ filePath: String) -> URL {
-    return URL.init(fileURLWithPath: filePath)
-}
-
 if CommandLine.argc == 1 {
     printUsage()
     exit(0)
@@ -213,7 +238,7 @@ struct Arg {
     var useFinderToTrash = false
 }
 
-let optstring = "valesyF" + "dfirPRW"
+let optstring = "vlaesyF" + "dfirPRW"
 
 func parseArg() -> Arg {
     var res = Arg()
@@ -250,27 +275,34 @@ if arg.list {
       showAdditionalInfo: arg.verbose,
       showHidden: arg.showall
     )
-    exit(0)
+    exit(EXIT_SUCCESS)
 } else if arg.empty || arg.emptySecurely {
-    let status = emptyTrash(securely: arg.emptySecurely, skipPrompt: arg.skipPrompt)
-    exit((status == noErr) ? EXIT_SUCCESS : EXIT_FAILURE)
+    do {
+        try emptyTrash(skipPrompt: arg.skipPrompt)
+        exit(EXIT_SUCCESS)
+    } catch {
+        print("failed to empty trash", to: &stdErr)
+        exit(EXIT_FAILURE)
+    }
 }
 
 checkForRoot()
 
-var exitValue : Int32 = 0
+var exitValue : Int32 = EXIT_SUCCESS
 
 var pathsForFinder : [URL] = []
 
+let fm = FileManager.default
+
 for i in Int(optind)..<Int(argc) {
     let path = (argv[i] as NSString).expandingTildeInPath
-    if !fileExistsAtPath(path) {
+    if !fm.fileExists(atPath: path) {
         print("trash: \(argv[i]): path does not exist", to: &stdErr);
         exitValue = EXIT_FAILURE
         continue
     }
 
-    let url = getFileURL(path)
+    let url = URL(fileURLWithPath: path)
 
     if arg.useFinderToTrash {
         pathsForFinder.append(url)
@@ -278,7 +310,7 @@ for i in Int(optind)..<Int(argc) {
     }
 
     do {
-        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        try fm.trashItem(at: url, resultingItemURL: nil)
     } catch {
         print("trash: \(argv[i]): cannot move to trash.", to: &stdErr)
         exitValue = EXIT_FAILURE
