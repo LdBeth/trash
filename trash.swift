@@ -1,0 +1,291 @@
+/* trash.swift
+ * Created by LdBeth
+
+The MIT License
+
+Copyright (c) 2021 LdBeth
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+ */
+
+import Foundation
+
+let versionNumberStr = String(format: "%d.%d.%d", 0, 9, 2)
+
+let argv = CommandLine.arguments
+let argc = CommandLine.argc
+let myBasename = (argv[0] as NSString).lastPathComponent
+
+func printUsage() {
+    print("usage: \(myBasename) [-vlesyF] <file> [<file> ...]",
+          "",
+          "  Move files/folders to the trash.",
+          "",
+          "  Options to use with <file>:",
+          "",
+          "  -v  Be verbose (show files as they are trashed, or if",
+          "      used with the -l option, show additional information",
+          "      about the trash contents)",
+          "  -F  Ask Finder to move the files to the trash, instead of",
+          "      using the system API.",
+          "",
+          "  Stand-alone options (to use without <file>):",
+          "",
+          "  -l  List items currently in the trash (add the -v option",
+          "      to see additional information, add the -a option to",
+          "      show hidden files)",
+          "  -e  Empty the trash (asks for confirmation)",
+          "  -s  Securely empty the trash (asks for confirmation)",
+          "  -y  Skips the confirmation prompt for -e and -s.",
+          "      CAUTION: Deletes permanently instantly.",
+          "",
+          "  Options supported by `rm` are silently accepted.",
+          "",
+          "Version \(versionNumberStr)",
+          "Copyright (c) 2021 LdBeth",
+          "",
+          separator: "\n"
+    )
+}
+
+var stdErr = FileHandle.standardError
+
+extension FileHandle : TextOutputStream {
+    public func write(_ string: String) {
+        guard let data = string.data(using: .utf8) else { return }
+        self.write(data)
+    }
+}
+
+func pathToTrash() -> URL {
+    do {
+        let res = try FileManager.default.url(
+          for: .trashDirectory,
+          in: .userDomainMask,
+          appropriateFor: nil,
+          create: false
+        )
+        return res
+    } catch {
+        print("trash directory not exists!", to: &stdErr)
+        exit(EXIT_FAILURE)
+    }
+}
+
+func directorySize(_ url: URL) throws -> Int64 {
+    let contents = try FileManager.default.contentsOfDirectory(
+      at: url,
+      includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey]
+    )
+
+    var size: Int64 = 0
+
+    for url in contents {
+        let isDirectoryResourceValue = try url.resourceValues(forKeys: [.isDirectoryKey])
+
+        if isDirectoryResourceValue.isDirectory ?? false {
+            size += try directorySize(url)
+        } else {
+            let fileSizeResourceValue = try url.resourceValues(forKeys: [.fileSizeKey])
+            size += Int64(fileSizeResourceValue.fileSize ?? 0)
+        }
+    }
+    return size
+}
+
+func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
+    let trash = pathToTrash()
+    let fm = FileManager.default
+    if let items = try? fm.contentsOfDirectory(
+         at: trash,
+         includingPropertiesForKeys: [],
+         options: (showHidden ? [] :
+                     [.skipsHiddenFiles])
+       ) {
+        for item in items {
+            print(item.path)
+        }
+    }
+    if showAdditionalInfo {
+        print("\nCalculating total disk usage of files in trash...")
+        if let bytes = try? directorySize(trash) {
+            let bcf = ByteCountFormatter()
+            let size = bcf.string(fromByteCount: bytes)
+            print("Total: \(size) (\(bytes) bytes)")
+        } else {
+            print("disk usage not available.")
+        }
+    }
+}
+
+func emptyTrash(securely: Bool, skipPrompt: Bool) -> OSStatus {
+    // TODO
+    print("empty trash is not implemented", to: &stdErr)
+    exit(EXIT_FAILURE)
+    // return noErr
+}
+
+func GetKeyPress() -> Character {
+    var key: Int = 0
+    let c: cc_t = 0
+    let cct = (c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c, c) // Set of 20 Special Characters
+    var oldt: termios = termios(c_iflag: 0, c_oflag: 0, c_cflag: 0, c_lflag: 0, c_cc: cct, c_ispeed: 0, c_ospeed: 0)
+
+    tcgetattr(STDIN_FILENO, &oldt) // 1473
+    var newt = oldt
+    newt.c_lflag = 1217  // Reset ICANON and Echo off
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt)
+    key = Int(getchar())  // works like "getch()"
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt)
+    return Character(UnicodeScalar(key)!)
+}
+
+func promptForChar(_ acceptableChars: String) -> Character {
+    let lowercase = acceptableChars.lowercased()
+    let uppercase = acceptableChars.uppercased()
+    var out = ""
+    acceptableChars.forEach { char in
+        out += "/\(char)"
+    }
+    let prompt = "[\(out.dropFirst())]"
+    while true {
+        print(prompt, terminator:"")
+        let input = GetKeyPress()
+        print("")
+        if lowercase.contains(input) || uppercase.contains(input) {
+            return input
+        }
+    }
+}
+
+func checkForRoot() {
+    if getuid() == 0 {
+        print("You seem to be running as root. Any files trashed",
+              "as root will be moved to root's trash folder instead",
+              "of your trash folder. Are you sure you want to continue?",
+              separator: "\n", terminator: "\n")
+        let char = promptForChar("yN")
+        if char != "y" {
+            exit(EXIT_FAILURE)
+        }
+    }
+}
+
+func fileExistsAtPath(_ filePath: String) -> Bool {
+    return FileManager.default.fileExists(atPath: filePath)
+}
+
+func getFileURL(_ filePath: String) -> URL {
+    return URL.init(fileURLWithPath: filePath)
+}
+
+if CommandLine.argc == 1 {
+    printUsage()
+    exit(0)
+}
+
+struct Arg {
+    var verbose = false
+    var list = false
+    var showall = false
+    var empty = false
+    var emptySecurely = false
+    var skipPrompt = false
+    var useFinderToTrash = false
+}
+
+let optstring = "valesyF" + "dfirPRW"
+
+func parseArg() -> Arg {
+    var res = Arg()
+    while case let option = getopt(argc, CommandLine.unsafeArgv, optstring), option != -1 {
+        switch UnicodeScalar(CUnsignedChar(option)) {
+        case "v":
+            res.verbose = true
+        case "l":
+            res.list = true
+        case "a":
+            res.showall = true
+        case "e":
+            res.empty = true
+        case "s":
+            res.emptySecurely = true
+        case "y":
+            res.skipPrompt = true
+        case "F":
+            res.useFinderToTrash = true
+        case "d","f","i","r","P","R","W":
+            break
+        default:
+            printUsage()
+            exit(EXIT_FAILURE)
+        }
+    }
+    return res
+}
+
+let arg = parseArg()
+
+if arg.list {
+    listTrashContents(
+      showAdditionalInfo: arg.verbose,
+      showHidden: arg.showall
+    )
+    exit(0)
+} else if arg.empty || arg.emptySecurely {
+    let status = emptyTrash(securely: arg.emptySecurely, skipPrompt: arg.skipPrompt)
+    exit((status == noErr) ? EXIT_SUCCESS : EXIT_FAILURE)
+}
+
+checkForRoot()
+
+var exitValue : Int32 = 0
+
+var pathsForFinder : [URL] = []
+
+for i in Int(optind)..<Int(argc) {
+    let path = (argv[i] as NSString).expandingTildeInPath
+    if !fileExistsAtPath(path) {
+        print("trash: \(argv[i]): path does not exist", to: &stdErr);
+        exitValue = EXIT_FAILURE
+        continue
+    }
+
+    let url = getFileURL(path)
+
+    if arg.useFinderToTrash {
+        pathsForFinder.append(url)
+        continue
+    }
+
+    do {
+        try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+    } catch {
+        print("trash: \(argv[i]): cannot move to trash.", to: &stdErr)
+        exitValue = EXIT_FAILURE
+    }
+}
+
+if pathsForFinder.count > 0 {
+    print("trash with Finder is not implemented", to: &stdErr)
+    exitValue = EXIT_FAILURE
+    // todo
+}
+
+exit(exitValue)

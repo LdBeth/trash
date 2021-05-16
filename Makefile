@@ -1,0 +1,19 @@
+
+SOURCE_FILES=trash.swift
+
+all: trash
+
+docs: trash.1
+
+trash: $(SOURCE_FILES)
+	@echo
+	@echo ---- Compiling:
+	@echo ======================================
+	swiftc -Osize -o $@ $(SOURCE_FILES)
+	strip $@
+
+clean:
+	@echo
+	@echo ---- Cleaning up:
+	@echo ======================================
+	-rm -Rf trash
