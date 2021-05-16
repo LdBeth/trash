@@ -113,6 +113,10 @@ func directorySize(_ url: URL) throws -> Int64 {
 func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     let trash = pathToTrash()
     let fm = FileManager.default
+    guard fm.isReadableFile(atPath: trash.path) else {
+        print("\(trash.path) not readable")
+        return
+    }
     guard let items = try? fm.contentsOfDirectory(
          at: trash,
          includingPropertiesForKeys: [],
@@ -139,9 +143,9 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
 }
 
 func emptyTrash(skipPrompt: Bool) throws {
-    let trashItemsCount = try FileManager.default.contentsOfDirectory(
-      atPath: pathToTrash().path
-    ).count
+    var error: NSDictionary?
+    let queryCount = "tell application \"Finder\" to count (get trash)"
+    let trashItemsCount = NSAppleScript(source: queryCount)!.executeAndReturnError(&error).int32Value
     if trashItemsCount == 0 {
         print("The trash is already empty")
         return
@@ -174,8 +178,7 @@ func emptyTrash(skipPrompt: Bool) throws {
         }
     }
     let tellFinderempty = "tell application \"Finder\" to empty"
-    var error: NSDictionary?
-    NSAppleScript(source: tellFinderempty)?.executeAndReturnError(&error)
+    NSAppleScript(source: tellFinderempty)!.executeAndReturnError(&error)
     return
 }
 
