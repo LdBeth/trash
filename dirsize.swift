@@ -1,3 +1,5 @@
+import Foundation
+
 func directorySize(_ url: URL) throws -> Int64 {
     let contents = try FileManager.default.contentsOfDirectory(
       at: url,

@@ -25,7 +25,6 @@ THE SOFTWARE.
  */
 
 import Foundation
-import AppKit
 
 let versionNumberStr = "0.9.2"
 
@@ -67,15 +66,6 @@ func printUsage() {
     print(helpString)
 }
 
-var stdErr = FileHandle.standardError
-
-extension FileHandle : TextOutputStream {
-    public func write(_ string: String) {
-        guard let data = string.data(using: .utf8) else { return }
-        self.write(data)
-    }
-}
-
 func pathToTrash() -> URL {
     do {
         let res = try FileManager.default.url(
@@ -110,7 +100,7 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     for item in items {
         print(item.path)
     }
-/*
+
     if showAdditionalInfo {
         print("\nCalculating total disk usage of files in trash...")
         if let bytes = try? directorySize(trash) {
@@ -121,7 +111,7 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
             print("disk usage not available.")
         }
     }
-*/
+
 }
 
 func emptyTrash(skipPrompt: Bool) throws {
@@ -162,72 +152,6 @@ func emptyTrash(skipPrompt: Bool) throws {
     let tellFinderempty = "tell application \"Finder\" to empty"
     NSAppleScript(source: tellFinderempty)!.executeAndReturnError(&error)
     return
-}
-
-func getFinderPID() -> pid_t {
-    for app in NSWorkspace.shared.runningApplications {
-        if app.bundleIdentifier == "com.apple.finder" {
-            return app.processIdentifier
-        }
-    }
-    return -1
-}
-
-enum FinderError: Error {
-    case failedToMkDesc, failedToSend, failedGetReply, notAllFilesTrashed
-}
-
-func askFinderToMoveFilesToTrash(files: [URL],
-                                 bringFinderToFront: Bool) throws {
-    let urlListDescr = NSAppleEventDescriptor(listDescriptor: ())
-    var i = 1
-    for filePath in files {
-        guard let descr = NSAppleEventDescriptor(
-                descriptorType: typeFileURL,
-                data: filePath.absoluteString.data(using: String.Encoding.utf8)
-              ) else {
-            throw FinderError.failedToMkDesc
-        }
-        urlListDescr.insert(descr, at: i)
-        i += 1
-    }
-    var finderPID = getFinderPID()
-    let targetDesc = NSAppleEventDescriptor(
-      descriptorType: typeKernelProcessID,
-      bytes: &finderPID,
-      length: MemoryLayout<pid_t>.size
-    )
-    let descriptor = NSAppleEventDescriptor.appleEvent(
-      withEventClass: kCoreEventClass,
-      eventID: 1684368495, // 'delo'
-      targetDescriptor: targetDesc,
-      returnID: AEReturnID(kAutoGenerateReturnID),
-      transactionID: AETransactionID(kAnyTransactionID)
-    )
-    descriptor.setDescriptor(
-      urlListDescr,
-      forKeyword: 757935405 // '----'
-    )
-    var replyEvent = AppleEvent()
-    let sendErr = AESendMessage(
-      descriptor.aeDesc, &replyEvent, AESendMode(kAEWaitReply),
-      kAEDefaultTimeout)
-    if sendErr != noErr {
-        throw FinderError.failedToSend
-    }
-
-    var replyAEDesc = AEDesc()
-    let getReplyErr = AEGetParamDesc(&replyEvent, keyDirectObject, typeWildCard, &replyAEDesc)
-    if getReplyErr != noErr {
-        // DEBUG: reply failed
-        print("\(getReplyErr),\(replyAEDesc)")
-        throw FinderError.failedGetReply
-    }
-    let replyDesc = NSAppleEventDescriptor(aeDescNoCopy: &replyAEDesc)
-    if replyDesc.numberOfItems == 0
-         || (1 < files.count && (replyDesc.descriptorType != typeAEList
-                                   || replyDesc.numberOfItems != files.count))
-    { throw FinderError.notAllFilesTrashed }
 }
 
 func GetKeyPress() -> Character {

@@ -1,5 +1,5 @@
 
-SOURCE_FILES=trash.swift
+SOURCE_FILES=finder.swift stderr.swift dirsize.swift main.swift
 
 all: trash
 
