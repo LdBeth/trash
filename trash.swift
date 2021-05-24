@@ -25,44 +25,46 @@ THE SOFTWARE.
  */
 
 import Foundation
+import AppKit
 
-let versionNumberStr = String(format: "%d.%d.%d", 0, 9, 2)
+let versionNumberStr = "0.9.2"
 
 let argv = CommandLine.arguments
 let argc = CommandLine.argc
 let myBasename = (argv[0] as NSString).lastPathComponent
 
+let helpString = """
+usage: \(myBasename) [-vlesyF] <file> [<file> ...]
+
+  Move files/folders to the trash.
+
+  Options to use with <file>:
+
+  -v  Be verbose (show files as they are trashed, or if
+      used with the -l option, show additional information
+      about the trash contents)
+  -F  Ask Finder to move the files to the trash, instead of
+      using the system API.
+
+  Stand-alone options (to use without <file>):
+
+  -l  List items currently in the trash (add the -v option
+      to see additional information, add the -a option to
+      show hidden files)
+  -e  Empty the trash (asks for confirmation)
+  -s  Securely empty the trash (asks for confirmation)
+      (obsolete)
+  -y  Skips the confirmation prompt for -e and -s.
+      CAUTION: Deletes permanently instantly.
+
+  Options supported by `rm` are silently accepted.
+
+Version \(versionNumberStr)
+Copyright (c) 2021 LdBeth
+"""
+
 func printUsage() {
-    print("usage: \(myBasename) [-vlesyF] <file> [<file> ...]",
-          "",
-          "  Move files/folders to the trash.",
-          "",
-          "  Options to use with <file>:",
-          "",
-          "  -v  Be verbose (show files as they are trashed, or if",
-          "      used with the -l option, show additional information",
-          "      about the trash contents)",
-          "  -F  Ask Finder to move the files to the trash, instead of",
-          "      using the system API.",
-          "",
-          "  Stand-alone options (to use without <file>):",
-          "",
-          "  -l  List items currently in the trash (add the -v option",
-          "      to see additional information, add the -a option to",
-          "      show hidden files)",
-          "  -e  Empty the trash (asks for confirmation)",
-          "  -s  Securely empty the trash (asks for confirmation)",
-          "      (obsolete)",
-          "  -y  Skips the confirmation prompt for -e and -s.",
-          "      CAUTION: Deletes permanently instantly.",
-          "",
-          "  Options supported by `rm` are silently accepted.",
-          "",
-          "Version \(versionNumberStr)",
-          "Copyright (c) 2021 LdBeth",
-          "",
-          separator: "\n"
-    )
+    print(helpString)
 }
 
 var stdErr = FileHandle.standardError
@@ -89,27 +91,6 @@ func pathToTrash() -> URL {
     }
 }
 
-func directorySize(_ url: URL) throws -> Int64 {
-    let contents = try FileManager.default.contentsOfDirectory(
-      at: url,
-      includingPropertiesForKeys: [.fileSizeKey, .isDirectoryKey]
-    )
-
-    var size: Int64 = 0
-
-    for url in contents {
-        let isDirectoryResourceValue = try url.resourceValues(forKeys: [.isDirectoryKey])
-
-        if isDirectoryResourceValue.isDirectory ?? false {
-            size += try directorySize(url)
-        } else {
-            let fileSizeResourceValue = try url.resourceValues(forKeys: [.fileSizeKey])
-            size += Int64(fileSizeResourceValue.fileSize ?? 0)
-        }
-    }
-    return size
-}
-
 func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     let trash = pathToTrash()
     let fm = FileManager.default
@@ -129,7 +110,7 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
     for item in items {
         print(item.path)
     }
-
+/*
     if showAdditionalInfo {
         print("\nCalculating total disk usage of files in trash...")
         if let bytes = try? directorySize(trash) {
@@ -140,6 +121,7 @@ func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
             print("disk usage not available.")
         }
     }
+*/
 }
 
 func emptyTrash(skipPrompt: Bool) throws {
@@ -147,7 +129,7 @@ func emptyTrash(skipPrompt: Bool) throws {
     let queryCount = "tell application \"Finder\" to count (get trash)"
     let trashItemsCount = NSAppleScript(source: queryCount)!.executeAndReturnError(&error).int32Value
     if trashItemsCount == 0 {
-        print("The trash is already empty")
+        print("The trash is already empty!")
         return
     }
     if !skipPrompt {
@@ -180,6 +162,72 @@ func emptyTrash(skipPrompt: Bool) throws {
     let tellFinderempty = "tell application \"Finder\" to empty"
     NSAppleScript(source: tellFinderempty)!.executeAndReturnError(&error)
     return
+}
+
+func getFinderPID() -> pid_t {
+    for app in NSWorkspace.shared.runningApplications {
+        if app.bundleIdentifier == "com.apple.finder" {
+            return app.processIdentifier
+        }
+    }
+    return -1
+}
+
+enum FinderError: Error {
+    case failedToMkDesc, failedToSend, failedGetReply, notAllFilesTrashed
+}
+
+func askFinderToMoveFilesToTrash(files: [URL],
+                                 bringFinderToFront: Bool) throws {
+    let urlListDescr = NSAppleEventDescriptor(listDescriptor: ())
+    var i = 1
+    for filePath in files {
+        guard let descr = NSAppleEventDescriptor(
+                descriptorType: typeFileURL,
+                data: filePath.absoluteString.data(using: String.Encoding.utf8)
+              ) else {
+            throw FinderError.failedToMkDesc
+        }
+        urlListDescr.insert(descr, at: i)
+        i += 1
+    }
+    var finderPID = getFinderPID()
+    let targetDesc = NSAppleEventDescriptor(
+      descriptorType: typeKernelProcessID,
+      bytes: &finderPID,
+      length: MemoryLayout<pid_t>.size
+    )
+    let descriptor = NSAppleEventDescriptor.appleEvent(
+      withEventClass: kCoreEventClass,
+      eventID: 1684368495, // 'delo'
+      targetDescriptor: targetDesc,
+      returnID: AEReturnID(kAutoGenerateReturnID),
+      transactionID: AETransactionID(kAnyTransactionID)
+    )
+    descriptor.setDescriptor(
+      urlListDescr,
+      forKeyword: 757935405 // '----'
+    )
+    var replyEvent = AppleEvent()
+    let sendErr = AESendMessage(
+      descriptor.aeDesc, &replyEvent, AESendMode(kAEWaitReply),
+      kAEDefaultTimeout)
+    if sendErr != noErr {
+        throw FinderError.failedToSend
+    }
+
+    var replyAEDesc = AEDesc()
+    let getReplyErr = AEGetParamDesc(&replyEvent, keyDirectObject, typeWildCard, &replyAEDesc)
+    if getReplyErr != noErr {
+        // DEBUG: reply failed
+        print("\(getReplyErr),\(replyAEDesc)")
+        throw FinderError.failedGetReply
+    }
+    let replyDesc = NSAppleEventDescriptor(aeDescNoCopy: &replyAEDesc)
+    if replyDesc.numberOfItems == 0
+         || (1 < files.count && (replyDesc.descriptorType != typeAEList
+                                   || replyDesc.numberOfItems != files.count))
+    { throw FinderError.notAllFilesTrashed }
 }
 
 func GetKeyPress() -> Character {
@@ -322,9 +370,19 @@ for i in Int(optind)..<Int(argc) {
 }
 
 if pathsForFinder.count > 0 {
-    print("trash with Finder is not implemented", to: &stdErr)
-    exitValue = EXIT_FAILURE
-    // todo
+    do {
+        try askFinderToMoveFilesToTrash(
+          files: pathsForFinder,
+          bringFinderToFront: !arg.useFinderToTrash
+        )
+        // verb printpaths
+    } catch FinderError.notAllFilesTrashed {
+        print("trash: some files were not moved to trash (authentication cancelled?)", to: &stdErr)
+        exitValue = EXIT_FAILURE
+    } catch {
+        print("trash: error: \(error).", to: &stdErr)
+        exitValue = EXIT_FAILURE
+    }
 }
 
 exit(exitValue)

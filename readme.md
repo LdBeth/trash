@@ -15,6 +15,13 @@ argument.
 **This feature isn't implemented in this version yet.**
 The API used by original Objective-C version is depreciated.
 
+## `~/.Trash` isn't readable
+
+You may need to enable "Full Disk Access" for your terminal from privacy
+settings. If the trash directory isn't readable `trash` will fallback to query
+the number of trashed items via Finder, while the listing items feature won't
+work.
+
 ## The MIT License
 
 Copyright (c) LdBeth
