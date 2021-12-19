@@ -1,5 +1,35 @@
 import Foundation
 import AppKit
+import ScriptingBridge
+
+@objc public protocol FinderApplication: NSObjectProtocol {
+    @objc optional var trash: FinderTrashObject { get }
+
+}
+
+@objc public protocol FinderItem: NSObjectProtocol {
+    @objc optional var physicalSize: Int64 { get }
+    @objc optional var URL: String { get }
+}
+
+extension SBObject: FinderItem {}
+
+@objc public protocol FinderTrashObject: FinderItem {
+    @objc var warnsBeforeEmptying: Bool { get set }
+    func items() -> SBElementArray
+    func emptySecurity(_: Bool)
+}
+
+extension SBApplication: FinderApplication {}
+
+fileprivate var finder : FinderApplication?
+func getFinderApp() -> FinderApplication {
+    if finder == nil {
+        finder = SBApplication.init(
+          bundleIdentifier: "com.apple.Finder")
+    }
+    return finder!
+}
 
 fileprivate func getFinderPID() -> pid_t {
     for app in NSWorkspace.shared.runningApplications {
@@ -14,14 +44,20 @@ enum FinderError: Error {
     case failedToMkDesc, failedToSend, failedGetReply, notAllFilesTrashed
 }
 
-func askFinderToMoveFilesToTrash(files: [URL],
+func getAbsolutePath(_ filePath: String) -> String {
+    // TODO
+    return filePath
+}
+
+func askFinderToMoveFilesToTrash(files: [String],
                                  bringFinderToFront: Bool) throws {
     let urlListDescr = NSAppleEventDescriptor(listDescriptor: ())
     var i = 1
     for filePath in files {
+        let url = URL(fileURLWithPath: getAbsolutePath(filePath))
         guard let descr = NSAppleEventDescriptor(
                 descriptorType: typeFileURL,
-                data: filePath.absoluteString.data(using: String.Encoding.utf8)
+                data: url.absoluteString.data(using: String.Encoding.utf8)
               ) else {
             throw FinderError.failedToMkDesc
         }

@@ -25,6 +25,7 @@ THE SOFTWARE.
  */
 
 import Foundation
+import ScriptingBridge
 
 let versionNumberStr = "0.9.2"
 
@@ -33,7 +34,7 @@ let argc = CommandLine.argc
 let myBasename = (argv[0] as NSString).lastPathComponent
 
 let helpString = """
-usage: \(myBasename) [-vlesyF] <file> [<file> ...]
+usage: \(myBasename) [-vilesyF] <file> [<file> ...]
 
   Move files/folders to the trash.
 
@@ -66,58 +67,47 @@ func printUsage() {
     print(helpString)
 }
 
-func pathToTrash() -> URL {
-    do {
-        let res = try FileManager.default.url(
-          for: .trashDirectory,
-          in: .userDomainMask,
-          appropriateFor: nil,
-          create: false
-        )
-        return res
-    } catch {
-        print("trash directory not exists!", to: &stdErr)
-        exit(EXIT_FAILURE)
+func printDiskUsageOfFinderItems(finderItems: SBElementArray) {
+    var totalPhysicalSize: Int64 = 0
+    print("\nCalculating total disk usage of files in trash...")
+    for item in finderItems {
+        var size: Int64
+        let url : URL = URL(string:(item as! FinderItem).URL!)!
+        let isDir = FileManager.default.fileExists(atPath:url.path)
+        if isDir {
+            do {
+                size = try directorySize(url)
+            }
+            catch {
+                size = 0
+            }
+        } else {
+            size = (item as! FinderItem).physicalSize ?? 0
+        }
+        totalPhysicalSize += size
     }
+    let bcf = ByteCountFormatter()
+    let size = bcf.string(fromByteCount: totalPhysicalSize)
+    print("Total: \(size) (\(totalPhysicalSize) bytes)")
 }
 
-func listTrashContents(showAdditionalInfo: Bool, showHidden: Bool) {
-    let trash = pathToTrash()
-    let fm = FileManager.default
-    guard fm.isReadableFile(atPath: trash.path) else {
-        print("\(trash.path) not readable")
-        return
-    }
-    guard let items = try? fm.contentsOfDirectory(
-         at: trash,
-         includingPropertiesForKeys: [],
-         options: (showHidden ? [] :
-                     [.skipsHiddenFiles])
-          ) else {
-        print("failed to get contents of trash directory", to: &stdErr)
-        exit(EXIT_FAILURE)
-    }
-    for item in items {
-        print(item.path)
+func listTrashContents(showAdditionalInfo: Bool) {
+    let finder = getFinderApp()
+    let itemsInTrash = finder.trash!.items()
+
+    for item in itemsInTrash {
+        print(URL(string:(item as! FinderItem).URL!)!.path)
     }
 
     if showAdditionalInfo {
-        print("\nCalculating total disk usage of files in trash...")
-        if let bytes = try? directorySize(trash) {
-            let bcf = ByteCountFormatter()
-            let size = bcf.string(fromByteCount: bytes)
-            print("Total: \(size) (\(bytes) bytes)")
-        } else {
-            print("disk usage not available.")
-        }
+        printDiskUsageOfFinderItems(
+          finderItems: itemsInTrash)
     }
-
 }
 
-func emptyTrash(skipPrompt: Bool) throws {
-    var error: NSDictionary?
-    let queryCount = "tell application \"Finder\" to count (get trash)"
-    let trashItemsCount = NSAppleScript(source: queryCount)!.executeAndReturnError(&error).int32Value
+func emptyTrash(securely: Bool, skipPrompt: Bool) throws {
+    let finder = getFinderApp()
+    let trashItemsCount : Int = finder.trash!.items().count
     if trashItemsCount == 0 {
         print("The trash is already empty!")
         return
@@ -129,6 +119,7 @@ func emptyTrash(skipPrompt: Bool) throws {
               "currently",
               trashItemsCount,
               "item\(plural ? "s" : "")",
+              securely ? " (and securely)" : "",
               "in the trash.")
         print("Are you sure you want to permanently delete",
               plural ? "these" : "this",
@@ -139,8 +130,7 @@ func emptyTrash(skipPrompt: Bool) throws {
             switch promptForChar("ylN") {
             case "l":
                 listTrashContents(
-                  showAdditionalInfo: false,
-                  showHidden: true
+                  showAdditionalInfo: false
                 )
             case "n":
                 return
@@ -149,8 +139,13 @@ func emptyTrash(skipPrompt: Bool) throws {
             }
         }
     }
-    let tellFinderempty = "tell application \"Finder\" to empty"
-    NSAppleScript(source: tellFinderempty)!.executeAndReturnError(&error)
+    if securely {
+        print("(secure empty trash will take a long while so please be patient...)");
+    }
+    let warnsBeforeEmptyingOriginalValue = finder.trash!.warnsBeforeEmptying
+    finder.trash!.warnsBeforeEmptying = false
+    finder.trash!.emptySecurity(securely)
+    finder.trash!.warnsBeforeEmptying = warnsBeforeEmptyingOriginalValue
     return
 }
 
@@ -207,7 +202,6 @@ if CommandLine.argc == 1 {
 struct Arg {
     var verbose = false
     var list = false
-    var showall = false
     var empty = false
     var emptySecurely = false
     var skipPrompt = false
@@ -224,8 +218,6 @@ func parseArg() -> Arg {
             res.verbose = true
         case "l":
             res.list = true
-        case "a":
-            res.showall = true
         case "e":
             res.empty = true
         case "s":
@@ -248,13 +240,13 @@ let arg = parseArg()
 
 if arg.list {
     listTrashContents(
-      showAdditionalInfo: arg.verbose,
-      showHidden: arg.showall
+      showAdditionalInfo: arg.verbose
     )
     exit(EXIT_SUCCESS)
 } else if arg.empty || arg.emptySecurely {
     do {
-        try emptyTrash(skipPrompt: arg.skipPrompt)
+        try emptyTrash(securely: arg.emptySecurely,
+                       skipPrompt: arg.skipPrompt)
         exit(EXIT_SUCCESS)
     } catch {
         print("failed to empty trash", to: &stdErr)
@@ -266,7 +258,7 @@ checkForRoot()
 
 var exitValue : Int32 = EXIT_SUCCESS
 
-var pathsForFinder : [URL] = []
+var pathsForFinder : [String] = []
 
 let fm = FileManager.default
 
@@ -278,12 +270,12 @@ for i in Int(optind)..<Int(argc) {
         continue
     }
 
-    let url = URL(fileURLWithPath: path)
-
     if arg.useFinderToTrash {
-        pathsForFinder.append(url)
+        pathsForFinder.append(path)
         continue
     }
+
+    let url = URL(fileURLWithPath: path)
 
     do {
         try fm.trashItem(at: url, resultingItemURL: nil)
@@ -292,6 +284,7 @@ for i in Int(optind)..<Int(argc) {
         exitValue = EXIT_FAILURE
     }
 }
+
 
 if pathsForFinder.count > 0 {
     do {
@@ -308,5 +301,6 @@ if pathsForFinder.count > 0 {
         exitValue = EXIT_FAILURE
     }
 }
+
 
 exit(exitValue)
