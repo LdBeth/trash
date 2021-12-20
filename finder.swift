@@ -4,6 +4,7 @@ import ScriptingBridge
 
 @objc public protocol FinderApplication: NSObjectProtocol {
     @objc optional var trash: FinderTrashObject { get }
+    func activate()
 
 }
 
@@ -73,8 +74,12 @@ func askFinderToMoveFilesToTrash(files: [URL],
     )
     descriptor.setDescriptor(
       urlListDescr,
-      forKeyword: 757935405 // '----'
+      forKeyword: keyAEResult // '----'
     )
+
+    if bringFinderToFront {
+        getFinderApp().activate()
+    }    
     var replyEvent = AppleEvent()
     let sendErr = AESendMessage(
       descriptor.aeDesc, &replyEvent, AESendMode(kAEWaitReply),

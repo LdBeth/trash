@@ -9,7 +9,7 @@ trash: $(SOURCE_FILES)
 	@echo
 	@echo ---- Compiling:
 	@echo ======================================
-	swiftc -Osize -o $@ $(SOURCE_FILES)
+	swiftc -Osize -remove-runtime-asserts -o $@ $(SOURCE_FILES)
 	strip $@
 
 clean:
