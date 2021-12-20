@@ -44,20 +44,14 @@ enum FinderError: Error {
     case failedToMkDesc, failedToSend, failedGetReply, notAllFilesTrashed
 }
 
-func getAbsolutePath(_ filePath: String) -> String {
-    // TODO
-    return filePath
-}
-
-func askFinderToMoveFilesToTrash(files: [String],
+func askFinderToMoveFilesToTrash(files: [URL],
                                  bringFinderToFront: Bool) throws {
     let urlListDescr = NSAppleEventDescriptor(listDescriptor: ())
     var i = 1
     for filePath in files {
-        let url = URL(fileURLWithPath: getAbsolutePath(filePath))
         guard let descr = NSAppleEventDescriptor(
                 descriptorType: typeFileURL,
-                data: url.absoluteString.data(using: String.Encoding.utf8)
+                data: filePath.absoluteString.data(using: String.Encoding.utf8)
               ) else {
             throw FinderError.failedToMkDesc
         }
@@ -71,8 +65,8 @@ func askFinderToMoveFilesToTrash(files: [String],
       length: MemoryLayout<pid_t>.size
     )
     let descriptor = NSAppleEventDescriptor.appleEvent(
-      withEventClass: kCoreEventClass,
-      eventID: 1684368495, // 'delo'
+      withEventClass: kAECoreSuite,
+      eventID: kAEDelete,
       targetDescriptor: targetDesc,
       returnID: AEReturnID(kAutoGenerateReturnID),
       transactionID: AETransactionID(kAnyTransactionID)
@@ -92,8 +86,6 @@ func askFinderToMoveFilesToTrash(files: [String],
     var replyAEDesc = AEDesc()
     let getReplyErr = AEGetParamDesc(&replyEvent, keyDirectObject, typeWildCard, &replyAEDesc)
     if getReplyErr != noErr {
-        // DEBUG: reply failed
-        print("\(getReplyErr),\(replyAEDesc)")
         throw FinderError.failedGetReply
     }
     let replyDesc = NSAppleEventDescriptor(aeDescNoCopy: &replyAEDesc)

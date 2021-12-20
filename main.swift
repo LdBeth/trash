@@ -263,7 +263,7 @@ checkForRoot()
 
 var exitValue : Int32 = EXIT_SUCCESS
 
-var pathsForFinder : [String] = []
+var pathsForFinder : [URL] = []
 
 let fm = FileManager.default
 
@@ -282,12 +282,12 @@ for i in Int(optind)..<Int(argc) {
         if key != "y" { continue }
     }
 
+    let url = URL(fileURLWithPath: path)
+
     if arg.useFinderToTrash {
-        pathsForFinder.append(path)
+        pathsForFinder.append(url)
         continue
     }
-
-    let url = URL(fileURLWithPath: path)
 
     do {
         try fm.trashItem(at: url, resultingItemURL: nil)
