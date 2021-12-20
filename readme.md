@@ -2,7 +2,7 @@
 
 This is http://hasseg.org/trash by Ali Rantakari rewritten in Swift.
 
-_This project is develped without using Xcode, only Command Line Tools
+_This project is developed without using Xcode, only Command Line Tools
 should be required to build the program. Why? Because Xcode sucks._
 
 ## The “put back” feature
@@ -11,9 +11,6 @@ By default, `trash` uses the low-level system API to move the specified
 files/folders to the trash. If you want `trash` to ask Finder to perform the
 trashing (e.g. to ensure that the _"put back"_ feature works), supply the `-F`
 argument.
-
-**This feature isn't implemented in this version yet.**
-The API used by original Objective-C version is depreciated.
 
 ## `~/.Trash` isn't readable
 
