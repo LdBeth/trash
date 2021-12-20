@@ -69,14 +69,18 @@ func printUsage() {
     print(helpString)
 }
 
-func printDiskUsageOfFinderItems(finderItems: SBElementArray) {
+func printDiskUsageOfFinderItems(finderItems: [FinderItem]) {
     var totalPhysicalSize: Int64 = 0
     print("\nCalculating total disk usage of files in trash...")
     for item in finderItems {
         var size: Int64
-        let url : URL = URL(string:(item as! FinderItem).URL!)!
-        let isDir = FileManager.default.fileExists(atPath:url.path)
-        if isDir {
+        let url : URL = URL(string:item.URL)!
+        var isDir: ObjCBool = ObjCBool(false)
+        if !FileManager.default.fileExists(
+             atPath:url.path, isDirectory: &isDir) {
+            continue
+        }
+        if isDir.boolValue {
             do {
                 size = try directorySize(url)
             }
@@ -84,7 +88,7 @@ func printDiskUsageOfFinderItems(finderItems: SBElementArray) {
                 size = 0
             }
         } else {
-            size = (item as! FinderItem).physicalSize ?? 0
+            size = item.physicalSize
         }
         totalPhysicalSize += size
     }
@@ -98,7 +102,7 @@ func listTrashContents(showAdditionalInfo: Bool) {
     let itemsInTrash = finder.trash!.items()
 
     for item in itemsInTrash {
-        print(URL(string:(item as! FinderItem).URL!)!.path)
+        print(URL(string:item.URL)!.path)
     }
 
     if showAdditionalInfo {

@@ -5,19 +5,19 @@ import ScriptingBridge
 @objc public protocol FinderApplication: NSObjectProtocol {
     @objc optional var trash: FinderTrashObject { get }
     func activate()
-
 }
 
 @objc public protocol FinderItem: NSObjectProtocol {
-    @objc optional var physicalSize: Int64 { get }
-    @objc optional var URL: String { get }
+    @objc var physicalSize: Int64 { get }
+    @objc var size: Int64 { get }
+    @objc var URL: String { get }
 }
 
-extension SBObject: FinderItem {}
+// extension SBObject: FinderItem {}
 
 @objc public protocol FinderTrashObject: FinderItem {
     @objc var warnsBeforeEmptying: Bool { get set }
-    func items() -> SBElementArray
+    func items() -> [FinderItem]
     func emptySecurity(_: Bool)
 }
 
