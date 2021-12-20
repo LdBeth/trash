@@ -1,0 +1,54 @@
+.Dd May 16, 2021
+.Dt TRASH 1
+.Os
+.Sh NAME
+.Nm trash
+.Nd move files/folders to the trash
+.Sh SYNOPSIS
+.Nm
+.Op Fl vlaesyF
+.Ar
+.Sh DESCRIPTION
+.Nm
+moves the specified files and/or folders to the system trash.
+.Pp
+The options are as follows:
+.Bl -tag -width Fl
+.It Fl v
+Be verbose when moving items to the trash, showing them as they are moved.
+.It Fl i
+Request confirmation before attempting to remove each file.
+.It Fl F
+Ask Finder to move the files to the trash, instead of using the system API.
+This is slower, but it utilizes Finder's UI (e.g. sounds) and ensures that
+the "put back" feature works. (Not implemented)
+.It Fl l
+List items currently in the trash. If this argument is used, no files need
+to be specified.
+.Fl l .
+.It Fl e
+Empty the trash.
+.Nm
+asks for confirmation before executing this action. If this argument is
+used, no files need to be specified.
+.It Fl s
+Securely empty the trash.
+.Nm
+asks for confirmation before executing this action. If this argument is
+used, no files need to be specified. (Not implemented and Obsolete)
+.It Fl y
+Skips the confirmation prompt for
+.Fl e
+and
+.Fl s .
+CAUTION: Deletes permanently instantly.
+.El
+.Pp
+.Sh NOTE
+Options supported by
+.Xr rm 1
+are silently accepted.
+.Sh SEE ALSO
+.Xr rm 1
+.Sh AUTHORS
+This man page is converted by LdBeth from the original Objective-C version.

@@ -43,6 +43,8 @@ usage: \(myBasename) [-vilesyF] <file> [<file> ...]
   -v  Be verbose (show files as they are trashed, or if
       used with the -l option, show additional information
       about the trash contents)
+  -i  Request confirmation before attempting to remove
+      each file.
   -F  Ask Finder to move the files to the trash, instead of
       using the system API.
 
@@ -201,6 +203,7 @@ if CommandLine.argc == 1 {
 
 struct Arg {
     var verbose = false
+    var interact = false
     var list = false
     var empty = false
     var emptySecurely = false
@@ -216,6 +219,8 @@ func parseArg() -> Arg {
         switch UnicodeScalar(CUnsignedChar(option)) {
         case "v":
             res.verbose = true
+        case "i":
+            res.interact = true
         case "l":
             res.list = true
         case "e":
@@ -226,7 +231,7 @@ func parseArg() -> Arg {
             res.skipPrompt = true
         case "F":
             res.useFinderToTrash = true
-        case "d","f","i","r","P","R","W":
+        case "d","f","r","P","R","W":
             break
         default:
             printUsage()
@@ -268,6 +273,13 @@ for i in Int(optind)..<Int(argc) {
         print("trash: \(argv[i]): path does not exist", to: &stdErr);
         exitValue = EXIT_FAILURE
         continue
+    }
+
+    if arg.interact {
+        print("remove \(path)? ", terminator:"")
+        let key = GetKeyPress().lowercased()
+        print(key)
+        if key != "y" { continue }
     }
 
     if arg.useFinderToTrash {
