@@ -81,12 +81,7 @@ func printDiskUsageOfFinderItems(finderItems: [FinderItem]) {
             continue
         }
         if isDir.boolValue {
-            do {
-                size = try directorySize(url)
-            }
-            catch {
-                size = 0
-            }
+            size = (try? directorySize(url)) ?? 0
         } else {
             size = item.physicalSize
         }
@@ -215,7 +210,7 @@ struct Arg {
     var useFinderToTrash = false
 }
 
-let optstring = "vlaesyF" + "dfirPRW"
+let optstring = "vilaesyF" + "dfrPRW"
 
 func parseArg() -> Arg {
     var res = Arg()
@@ -294,6 +289,7 @@ for i in Int(optind)..<Int(argc) {
     }
 
     do {
+        if arg.verbose { print(url.path) }
         try fm.trashItem(at: url, resultingItemURL: nil)
     } catch {
         print("trash: \(argv[i]): cannot move to trash.", to: &stdErr)
@@ -304,11 +300,11 @@ for i in Int(optind)..<Int(argc) {
 
 if pathsForFinder.count > 0 {
     do {
+        if arg.verbose { pathsForFinder.forEach{ print($0.path) } }
         try askFinderToMoveFilesToTrash(
           files: pathsForFinder,
           bringFinderToFront: !arg.useFinderToTrash
         )
-        // verb printpaths
     } catch FinderError.notAllFilesTrashed {
         print("trash: some files were not moved to trash (authentication cancelled?)", to: &stdErr)
         exitValue = EXIT_FAILURE
