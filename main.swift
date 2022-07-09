@@ -119,7 +119,7 @@ func emptyTrash(securely: Bool, skipPrompt: Bool) throws {
               plural ? "are" : "is",
               "currently",
               trashItemsCount,
-              "item\(plural ? "s" : "")",
+              plural ? "items" : "item",
               securely ? " (and securely)" : "",
               "in the trash.")
         print("Are you sure you want to permanently delete",
