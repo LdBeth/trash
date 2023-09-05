@@ -74,7 +74,7 @@ func printDiskUsageOfFinderItems(finderItems: [FinderItem]) {
     print("\nCalculating total disk usage of files in trash...")
     for item in finderItems {
         var size: Int64
-        let url : URL = URL(string:item.URL)!
+        let url : URL = URL(string:item.URL!)!
         var isDir: ObjCBool = ObjCBool(false)
         if !FileManager.default.fileExists(
              atPath:url.path, isDirectory: &isDir) {
@@ -83,7 +83,7 @@ func printDiskUsageOfFinderItems(finderItems: [FinderItem]) {
         if isDir.boolValue {
             size = (try? directorySize(url)) ?? 0
         } else {
-            size = item.physicalSize
+            size = item.physicalSize ?? 0
         }
         totalPhysicalSize += size
     }
@@ -97,7 +97,7 @@ func listTrashContents(showAdditionalInfo: Bool) {
     let itemsInTrash = finder.trash!.items()
 
     for item in itemsInTrash {
-        print(URL(string:item.URL)!.path)
+        print(URL(string:item.URL!)!.path)
     }
 
     if showAdditionalInfo {
@@ -171,7 +171,7 @@ func promptForChar(_ acceptableChars: String) -> String {
     acceptableChars.forEach { char in
         out += "/\(char)"
     }
-    let prompt = "[\(out.dropFirst())]"
+    let prompt = "[\(out.dropFirst())]: "
     while true {
         print(prompt, terminator:"")
         let input = GetKeyPress().lowercased()
